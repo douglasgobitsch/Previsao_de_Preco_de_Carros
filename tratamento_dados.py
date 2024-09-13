@@ -1,23 +1,27 @@
 import dask.dataframe as dd
-
 # Ler o CSV forçando todas as colunas como string
-df = dd.read_csv('dataset_cars.csv', dtype=str, low_memory=False)
+df = dd.read_csv('Automotive.csv', dtype=str, low_memory=False)
 
 # Definir colunas a serem convertidas
-#colunas_float = ['coluna_x', 'coluna_y']  # Coloque os nomes das colunas que devem ser float
-#colunas_int = ['coluna_z']  # Coloque os nomes das colunas que devem ser int
+colunas_float = ['msrp', 'askPrice', 'vf_BasePrice']  # Coloque os nomes das colunas que devem ser float
+#colunas_int = ['', '']  # Coloque os nomes das colunas que devem ser int
+colunas_data = ['firstSeen', 'lastSeen', 'vf_ModelYear']  # Coloque os nomes das colunas que devem ser convertidas para datetime
 
 # Preencher valores nulos para colunas que serão convertidas
-#for col in colunas_float + colunas_int:
-#    df[col] = df[col].fillna('')  # Preencher valores nulos com string vazia
+for col in colunas_float + colunas_data:
+    df[col] = df[col].fillna('')  # Preencher valores nulos com string vazia
 
-# Converter para float e int
-#for col in colunas_float:
-#    df[col] = df[col].astype(float, errors='coerce')  # Convertendo para float, forçando erros para NaN
+# Converter para float
+for col in colunas_float:
+    df[col] = dd.to_numeric(df[col], errors='coerce')  # Convertendo para float, forçando erros para NaN
 
-#for col in colunas_int:
-#    df[col] = df[col].astype(float, errors='coerce')  # Primeiro converter para float para lidar com valores nulos
-#    df[col] = df[col].fillna(0).astype(int)  # Preencher NaN com 0 e converter para int
+# Converter para datetime
+for col in colunas_data:
+    df[col] = dd.to_datetime(df[col], errors='coerce')  # Convertendo para datetime, forçando erros para NaT (Not a Time)
 
-# Salvar o novo CSV
-df.to_csv('dataset_cars_novo.csv', single_file=True, index=False)
+# Colunas que serão mantidas
+colunas_desejadas = ['msrp', 'askPrice', 'vf_BasePrice', 'firstSeen', 'lastSeen', 'vf_ModelYear', 'color', 'brandName', 'modelName', 'vf_BodyClass', 'vf_FuelTypePrimary', 'vf_Series', 'vf_TransmissionStyle']
+df_selecionado = df[colunas_desejadas]
+
+# Salvar o novo CSV com apenas as colunas selecionadas
+df_selecionado.to_csv('dataset_cars_selecionado.csv', single_file=True, index=False)
