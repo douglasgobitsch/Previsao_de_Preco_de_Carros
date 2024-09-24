@@ -19,7 +19,7 @@ def get_data_from_postgres():
     session = Session()
     
     # Consultar a tabela com os dados do carro (limitando a 100 linhas)
-    query = "SELECT vin, vf_modelyear, askprice, brandname FROM cars LIMIT 20"
+    query = "SELECT vin, vf_modelyear, askprice, brandname FROM cars WHERE askprice IS NOT NULL ORDER BY askprice DESC LIMIT 20"
     df = pd.read_sql(query, session.bind)
     
     # Fechar a sessão
@@ -73,27 +73,18 @@ app.layout = dbc.Container([
 @app.callback(
     Output('example-graph', 'figure'),
     Input('brand-dropdown', 'value'),
-    Input('vin-dropdown', 'value'),
     Input(ThemeSwitchAIO.ids.switch('theme'), 'value')
 )
-def update_graph(selected_brand, selected_vin, toggle):
+def update_graph(selected_brand, toggle):
     templates = template_theme1 if toggle else template_theme2
     
     # Se 'Todos os Carros' ou 'Todos os VINs' forem selecionados, mostrar todos os dados
-    if selected_brand == "Todos os Carros" and selected_vin == "Todos os VINs":
+    if selected_brand == "Todos os Carros":
         fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
     
     # Se apenas uma marca for selecionada
-    elif selected_brand != "Todos os Carros" and selected_vin == "Todos os VINs":
+    elif selected_brand != "Todos os Carros":
         tabela_filtrada = df[df['brandname'] == selected_brand]
-        if not tabela_filtrada.empty:
-            fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
-        else:
-            fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)  # Caso não haja dados
-    
-    # Se apenas um VIN for selecionado
-    elif selected_brand == "Todos os Carros" and selected_vin != "Todos os VINs":
-        tabela_filtrada = df[df['vin'] == selected_vin]
         if not tabela_filtrada.empty:
             fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
         else:
@@ -101,7 +92,7 @@ def update_graph(selected_brand, selected_vin, toggle):
     
     # Se tanto a marca quanto o VIN forem selecionados
     else:
-        tabela_filtrada = df[(df['brandname'] == selected_brand) & (df['vin'] == selected_vin)]
+        tabela_filtrada = df[(df['brandname'] == selected_brand)]
         if not tabela_filtrada.empty:
             fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
         else:
