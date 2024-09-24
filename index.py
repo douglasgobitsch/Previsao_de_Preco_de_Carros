@@ -1,78 +1,118 @@
-from dash import Dash, dcc, html, Input, Output, callback
+from dash import Dash, dcc, html, Input, Output, callback 
 import plotly.express as px
- 
 import pandas as pd
-
-from app import *
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import ThemeSwitchAIO
 
-df = pd.read_csv('dataset_cars_novo.csv')
-#lê o arquivo csv já tratado
+# Configurações de conexão
+DATABASE_URI = 'postgresql+psycopg2://postgres:123@localhost/projeto isaac'
+
+# Criar uma engine de conexão
+engine = create_engine(DATABASE_URI)
+Session = sessionmaker(bind=engine)
+
+# Função para buscar os dados do PostgreSQL
+def get_data_from_postgres():
+    # Criar uma sessão
+    session = Session()
+    
+    # Consultar a tabela com os dados do carro
+    query = "SELECT vin, vf_ModelYear, askPrice, brandName FROM cars"
+    df = pd.read_sql(query, session.bind)
+    
+    # Fechar a sessão
+    session.close()
+    
+    return df
+
+# Carregar os dados do PostgreSQL
+df = get_data_from_postgres()
 
 app = Dash(__name__)
 
+# Definir temas para troca
 url_theme1 = dbc.themes.MORPH
 url_theme2 = dbc.themes.SOLAR
 template_theme1 = 'morph'
 template_theme2 = 'solar'
-#define os temas do site pra que sejam aplicados com mais facilidade nos gráficos
 
-fig = px.bar(df, x="vf_ModelYear", y="askPrice", color="brandName", barmode="group")
-opcoes = list(df['brandName'].unique())
+# Criar gráfico de barras padrão
+fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="group")
+
+# Opções do dropdown: incluir marcas e o VIN (ID dos veículos)
+opcoes = list(df['brandname'].unique())
 opcoes.append("Todos os Carros")
-#define os valores do gráfico de barra e atribui os valores da coluna ao botão interativo
 
+# Adicionar VIN ao dropdown
+opcoes_vin = list(df['vin'].unique())
+opcoes_vin.append("Todos os VINs")
+
+# Layout da página
 app.layout = dbc.Container([
-    
     dbc.Row([
         dbc.Col([
-            ThemeSwitchAIO(aio_id = 'theme', themes = [url_theme1, url_theme2]),
-            html.H1(children= 'Previsão de Preço de Carros',
-            style={'textAlign' : 'center'}), 
-            html.H3(children= 'Uma dashboard feita por Douglas Gobitsch, Cauã Guerreiro e Vinícius Raiol.',
-            style={'textAlign' : 'center'})
+            ThemeSwitchAIO(aio_id='theme', themes=[url_theme1, url_theme2]),
+            html.H1(children='Previsão de Preço de Carros', style={'textAlign': 'center'}), 
+            html.H3(children='Uma dashboard feita por Douglas Gobitsch, Cauã Guerreiro e Vinícius Raiol.',
+                    style={'textAlign': 'center'})
         ])
     ]),
-    #escreve o cabeçalho do site
-    
+    # Dropdown de marcas
     dbc.Row([
         dbc.Col([
-            dcc.Dropdown(opcoes, value='Todos os Carros', id='vin'),
+            dcc.Dropdown(opcoes, value='Todos os Carros', id='brand-dropdown', placeholder="Selecione a marca"),
         ])
     ]),
-    #insere o botão dropdown
-    
+    # Dropdown de VINs
     dbc.Row([
         dbc.Col([
-            dcc.Graph(
-                id='example-graph',
-                figure=fig
-            )
+            dcc.Dropdown(opcoes_vin, value='Todos os VINs', id='vin-dropdown', placeholder="Selecione o VIN"),
         ])
     ]),
-    #insere o gráfico de barra
-   
+    # Gráfico de barras
+    dbc.Row([
+        dbc.Col([
+            dcc.Graph(id='example-graph', figure=fig)
+        ])
+    ])
 ])
+
+# Callback para atualizar o gráfico com base na seleção de marca ou VIN
 @app.callback(
     Output('example-graph', 'figure'),
-    Input('vin', 'value'),
+    Input('brand-dropdown', 'value'),
+    Input('vin-dropdown', 'value'),
     Input(ThemeSwitchAIO.ids.switch('theme'), 'value')
 )
-#faz interação da troca de temas e do botão
-def bar(value, toggle):
+def update_graph(selected_brand, selected_vin, toggle):
     templates = template_theme1 if toggle else template_theme2
     
-    if value == "Todos os Carros":
-        fig = px.bar(df, x="vf_ModelYear", y="askPrice", color="brandName", barmode="group", template = templates)
+    # Se 'Todos os Carros' ou 'Todos os VINs' forem selecionados, mostrar todos os dados
+    if selected_brand == "Todos os Carros" and selected_vin == "Todos os VINs":
+        fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+    
+    # Se apenas uma marca for selecionada
+    elif selected_brand != "Todos os Carros" and selected_vin == "Todos os VINs":
+        tabela_filtrada = df.loc[df['brandname'] == selected_brand]
+        fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+    
+    # Se apenas um VIN for selecionado
+    elif selected_brand == "Todos os Carros" and selected_vin != "Todos os VINs":
+        tabela_filtrada = df.loc[df['vin'] == selected_vin]
+        fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+    
+    # Se tanto a marca quanto o VIN forem selecionados
     else:
-        tabela_filtrada = df.loc[df['brandName']==value, :]
-        fig = px.bar(tabela_filtrada, x="vf_ModelYear", y="askPrice", color="brandName", barmode="group", template = templates)
-        
-    fig.update_layout(template = templates)
+        tabela_filtrada = df.loc[(df['brandname'] == selected_brand) & (df['vin'] == selected_vin)]
+        fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+    
+    # Atualizar layout com o template do tema selecionado
+    fig.update_layout(template=templates)
+    
     return fig
-    #filtra os valores para que apareçam apenas valores de um só país e retorna esses valores atualizados
 
-
+# Iniciar o servidor
 if __name__ == '__main__':
     app.run(debug=True)
-#inicia o servidor do app no flask
