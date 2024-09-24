@@ -1,4 +1,4 @@
-from dash import Dash, dcc, html, Input, Output, callback 
+from dash import Dash, dcc, html, Input, Output
 import plotly.express as px
 import pandas as pd
 from sqlalchemy import create_engine
@@ -18,8 +18,8 @@ def get_data_from_postgres():
     # Criar uma sessão
     session = Session()
     
-    # Consultar a tabela com os dados do carro
-    query = "SELECT vin, vf_ModelYear, askPrice, brandName FROM cars"
+    # Consultar a tabela com os dados do carro (limitando a 100 linhas)
+    query = "SELECT vin, vf_modelyear, askprice, brandname FROM cars LIMIT 20"
     df = pd.read_sql(query, session.bind)
     
     # Fechar a sessão
@@ -45,10 +45,6 @@ fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="gro
 opcoes = list(df['brandname'].unique())
 opcoes.append("Todos os Carros")
 
-# Adicionar VIN ao dropdown
-opcoes_vin = list(df['vin'].unique())
-opcoes_vin.append("Todos os VINs")
-
 # Layout da página
 app.layout = dbc.Container([
     dbc.Row([
@@ -63,12 +59,6 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             dcc.Dropdown(opcoes, value='Todos os Carros', id='brand-dropdown', placeholder="Selecione a marca"),
-        ])
-    ]),
-    # Dropdown de VINs
-    dbc.Row([
-        dbc.Col([
-            dcc.Dropdown(opcoes_vin, value='Todos os VINs', id='vin-dropdown', placeholder="Selecione o VIN"),
         ])
     ]),
     # Gráfico de barras
@@ -95,18 +85,27 @@ def update_graph(selected_brand, selected_vin, toggle):
     
     # Se apenas uma marca for selecionada
     elif selected_brand != "Todos os Carros" and selected_vin == "Todos os VINs":
-        tabela_filtrada = df.loc[df['brandname'] == selected_brand]
-        fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+        tabela_filtrada = df[df['brandname'] == selected_brand]
+        if not tabela_filtrada.empty:
+            fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+        else:
+            fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)  # Caso não haja dados
     
     # Se apenas um VIN for selecionado
     elif selected_brand == "Todos os Carros" and selected_vin != "Todos os VINs":
-        tabela_filtrada = df.loc[df['vin'] == selected_vin]
-        fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+        tabela_filtrada = df[df['vin'] == selected_vin]
+        if not tabela_filtrada.empty:
+            fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+        else:
+            fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)  # Caso não haja dados
     
     # Se tanto a marca quanto o VIN forem selecionados
     else:
-        tabela_filtrada = df.loc[(df['brandname'] == selected_brand) & (df['vin'] == selected_vin)]
-        fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+        tabela_filtrada = df[(df['brandname'] == selected_brand) & (df['vin'] == selected_vin)]
+        if not tabela_filtrada.empty:
+            fig = px.bar(tabela_filtrada, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)
+        else:
+            fig = px.bar(df, x="vf_modelyear", y="askprice", color="brandname", barmode="group", template=templates)  # Caso não haja dados
     
     # Atualizar layout com o template do tema selecionado
     fig.update_layout(template=templates)
