@@ -64,7 +64,8 @@ app.layout = dbc.Container([
                 id='chart-type',
                 options=[
                     {'label': 'Gráfico de Dispersão', 'value': 'scatter'},
-                    {'label': 'Gráfico de Colunas', 'value': 'bar'}
+                    {'label': 'Gráfico de Colunas', 'value': 'bar'},
+                    {'label': 'Gráfico de Pizza', 'value': 'pie'}  # Nova opção de gráfico de pizza
                 ],
                 value='scatter',  # Valor padrão
                 labelStyle={'display': 'inline-block', 'margin-right': '10px'}
@@ -125,6 +126,11 @@ def update_graph(selected_brand, selected_slider_brand, chart_type, toggle):
     elif chart_type == 'bar':
         fig = px.bar(tabela_filtrada, x="modelname", y="askprice", color="brandname", template=templates)
         slider_style = {'display': 'none'}  # Esconde o controle deslizante
+
+    # Se o tipo de gráfico for 'pie', cria um gráfico de pizza
+    elif chart_type == 'pie':
+        fig = px.pie(tabela_filtrada, names='brandname', values='askprice', template=templates)
+        slider_style = {'display': 'none'}  # Esconde o controle deslizante para o gráfico de pizza
 
     fig.update_layout(template=templates)
     
