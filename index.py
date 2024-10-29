@@ -5,9 +5,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import dash_bootstrap_components as dbc
 from dash_bootstrap_templates import ThemeSwitchAIO
+import psycopg2
 
 # Conexão com o banco de dados
-DATABASE_URI = 'postgresql+psycopg2://postgres:123@localhost/projeto isaac'
+DATABASE_URI = 'postgresql+psycopg2://postgres:senha@localhost/dataset'
 
 engine = create_engine(DATABASE_URI)
 Session = sessionmaker(bind=engine)
@@ -15,14 +16,38 @@ Session = sessionmaker(bind=engine)
 def get_data_from_postgres():
     session = Session()
     
-    query = "SELECT vin, modelname, askprice, brandname FROM cars WHERE askprice IS NOT NULL ORDER BY askprice DESC LIMIT 20"
-    df = pd.read_sql(query, session.bind)
+    query = "WITH LatestCars AS (SELECT vin, brandname, modelname, msrp, askprice, vf_baseprice, firstseen, lastseen, vf_modelyear, ROW_NUMBER() OVER (PARTITION BY modelname ORDER BY lastseen DESC) AS row_num FROM cars) SELECT * FROM LatestCars WHERE row_num = 1 ORDER BY askprice DESC LIMIT 30;"
+    df_bar = pd.read_sql(query, session.bind)
     
     session.close()
     
-    return df
+    return df_bar
 
-df = get_data_from_postgres()
+df_bar = get_data_from_postgres()
+
+def get_data_from_postgres():
+    session = Session()
+    
+    query = "SELECT vin, modelname, askprice, brandname FROM cars WHERE askprice IS NOT NULL ORDER BY askprice DESC LIMIT 20"
+    df_pizza = pd.read_sql(query, session.bind)
+    
+    session.close()
+    
+    return df_pizza
+
+df_pizza = get_data_from_postgres()
+
+def get_data_from_postgres():
+    session = Session()
+    
+    query = "WITH MarcaTotalPreco AS (SELECT brandname, SUM(askprice) AS total_preco FROM cars GROUP BY brandname ORDER BY total_preco DESC LIMIT 20), LatestCars AS (SELECT vin, brandname, modelname, msrp, askprice, vf_baseprice, firstseen, lastseen, vf_modelyear, ROW_NUMBER() OVER (PARTITION BY modelname ORDER BY lastseen DESC) AS row_num FROM cars), RankedCars AS (SELECT *, RANK() OVER (PARTITION BY brandname ORDER BY askprice DESC) AS rank FROM LatestCars WHERE row_num = 1 AND brandname IN (SELECT brandname FROM MarcaTotalPreco)) SELECT * FROM RankedCars WHERE rank <= 15 ORDER BY brandname, askprice DESC;"
+    df_scatter = pd.read_sql(query, session.bind)
+    
+    session.close()
+    
+    return df_scatter
+
+df_scatter = get_data_from_postgres()
 
 app = Dash(__name__)
 
@@ -33,11 +58,11 @@ template_theme1 = 'morph'
 template_theme2 = 'solar'
 
 # Opções de marcas
-opcoes = list(df['brandname'].unique())
+opcoes = list(df_pizza['brandname'].unique())
 opcoes.append("Todos os Carros")
 
 # Gerando dicionário de marcas para usar no Slider
-brand_options = {i: brand for i, brand in enumerate(df['brandname'].unique())}
+brand_options = {i: brand for i, brand in enumerate(df_scatter['brandname'].unique())}
 
 # Layout do app
 app.layout = dbc.Container([
@@ -110,21 +135,33 @@ def update_graph(selected_brand, selected_slider_brand, chart_type, toggle):
     templates = template_theme1 if toggle else template_theme2
 
     # Filtrar dados com base na marca selecionada
+
     if selected_brand == "Todos os Carros":
-        tabela_filtrada = df
+        tabela_filtrada_bar = df_bar
     else:
-        tabela_filtrada = df[df['brandname'] == selected_brand]
+        tabela_filtrada_bar = df_bar[df_bar['brandname'] == selected_brand]
+
+    if selected_brand == "Todos os Carros":
+        tabela_filtrada = df_pizza
+    else:
+        tabela_filtrada = df_pizza[df_pizza['brandname'] == selected_brand]
+
+    if selected_brand == "Todos os Carros":
+        tabela_filtrada_scatter = df_scatter
+    else:
+        tabela_filtrada_scatter = df_scatter[df_scatter['brandname'] == selected_brand]
+
 
     # Se o tipo de gráfico for 'scatter', aplica o filtro do slider de marcas
     if chart_type == 'scatter':
         selected_brand_name = brand_options[selected_slider_brand]  # Pega o nome da marca selecionada no slider
-        tabela_filtrada = tabela_filtrada[tabela_filtrada['brandname'] == selected_brand_name]
-        fig = px.scatter(tabela_filtrada, x="modelname", y="askprice", color="brandname", template=templates)
+        tabela_filtrada_scatter = tabela_filtrada_scatter[tabela_filtrada_scatter['brandname'] == selected_brand_name]
+        fig = px.scatter(tabela_filtrada_scatter, x="modelname", y="askprice", color="brandname", template=templates)
         slider_style = {'display': 'block'}  # Mostra o controle deslizante
 
     # Se o tipo de gráfico for 'bar', exibe o gráfico de colunas (barras), sem filtrar por marca no slider
     elif chart_type == 'bar':
-        fig = px.bar(tabela_filtrada, x="modelname", y="askprice", color="brandname", template=templates)
+        fig = px.bar(tabela_filtrada_bar, x="modelname", y="askprice", color="brandname", template=templates)
         slider_style = {'display': 'none'}  # Esconde o controle deslizante
 
     # Se o tipo de gráfico for 'pie', cria um gráfico de pizza
