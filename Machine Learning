@@ -11,7 +11,7 @@ db_url = "postgresql://username:password@host:port/database"
 engine = create_engine(db_url)
 
 # Carregar os dados da tabela
-query = "SELECT quilometragem, ano, marca, preco FROM tabela_veiculos" 
+query = "SELECT vf_modelyear, brandname, askprice, vf_baseprice FROM tabela_veiculos" 
 data = pd.read_sql(query, engine)
 
 # Pré-processamento e seleção de variáveis
