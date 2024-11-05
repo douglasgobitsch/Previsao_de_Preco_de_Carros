@@ -7,15 +7,15 @@ import psycopg2
 from sqlalchemy import create_engine
 
 # Conectar ao banco de dados PostgreSQL
-db_url = "postgresql://username:password@host:port/database"  # Substitua pelas suas credenciais
+db_url = "postgresql://username:password@host:port/database"  
 engine = create_engine(db_url)
 
 # Carregar os dados da tabela
-query = "SELECT quilometragem, ano, marca, preco FROM tabela_veiculos"  # Ajuste o nome da tabela e colunas
+query = "SELECT quilometragem, ano, marca, preco FROM tabela_veiculos" 
 data = pd.read_sql(query, engine)
 
 # Pré-processamento e seleção de variáveis
-X = data[['quilometragem', 'ano', 'marca']]  # substitua pelas variáveis relevantes
+X = data[['quilometragem', 'ano', 'marca']]
 y = data['preco']
 
 # Dividir em treino e teste
