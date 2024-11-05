@@ -1,28 +1,43 @@
 import joblib
+import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
-import pandas as pd
-import psycopg2
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-# Conectar ao banco de dados PostgreSQL
-db_url = "postgresql://username:password@host:port/database"  
-engine = create_engine(db_url)
+# Conexão com o banco de dados PostgreSQL
+DATABASE_URI = 'postgresql+psycopg2://postgres:senha@localhost/dataset'  # Substitua com as credenciais corretas
+engine = create_engine(DATABASE_URI)
+Session = sessionmaker(bind=engine)
 
-# Carregar os dados da tabela
-query = "SELECT vf_modelyear, brandname, askprice, vf_baseprice FROM tabela_veiculos" 
-data = pd.read_sql(query, engine)
+# Função para carregar os dados do PostgreSQL
+def carregar_dados():
+    session = Session()
+    query = """
+    SELECT quilometragem, vf_modelyear AS ano, brandname AS marca, askprice AS preco
+    FROM cars
+    WHERE askprice IS NOT NULL
+    """
+    dados = pd.read_sql(query, session.bind)
+    session.close()
+    return dados
+
+# Carregar os dados
+data = carregar_dados()
 
 # Pré-processamento e seleção de variáveis
-X = data[['brandname', 'vf_modelyear']]
-y = data['vf_askprice']
+X = data[['quilometragem', 'ano', 'marca']]  # Colunas relevantes
+y = data['preco']
+
+# Codificar a coluna 'marca' (se for categórica) para o modelo
+X = pd.get_dummies(X, columns=['marca'], drop_first=True)
 
 # Dividir em treino e teste
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Treinar o modelo
-model = RandomForestRegressor()
+model = RandomForestRegressor(random_state=42)
 model.fit(X_train, y_train)
 
 # Avaliação do modelo
@@ -32,3 +47,4 @@ print(f"RMSE: {rmse}")
 
 # Salvar o modelo
 joblib.dump(model, 'modelo_previsao_veiculos.joblib')
+print("Modelo salvo com sucesso!")
