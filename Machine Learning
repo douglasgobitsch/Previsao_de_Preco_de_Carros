@@ -3,11 +3,14 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import LabelEncoder
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import datetime
 
 # Conexão com o banco de dados PostgreSQL
-DATABASE_URI = 'postgresql+psycopg2://postgres:senha@localhost/dataset'  # Substitua com as credenciais corretas
+DATABASE_URI = 'postgresql+psycopg2://postgres:123@localhost/projeto isaac'  # Substitua com as credenciais corretas
 engine = create_engine(DATABASE_URI)
 Session = sessionmaker(bind=engine)
 
@@ -15,23 +18,40 @@ Session = sessionmaker(bind=engine)
 def carregar_dados():
     session = Session()
     query = """
-    SELECT quilometragem, vf_modelyear AS ano, brandname AS marca, askprice AS preco
+    SELECT vf_modelyear AS ano, brandname AS marca, askprice AS preco
     FROM cars
     WHERE askprice IS NOT NULL
+    LIMIT 1000;
     """
     dados = pd.read_sql(query, session.bind)
     session.close()
+
+    # Verificar e converter a coluna 'ano' para o ano numérico
+    if pd.api.types.is_datetime64_any_dtype(dados['ano']):
+        dados['ano'] = dados['ano'].dt.year  # Extrai o ano como inteiro
+    elif isinstance(dados['ano'].iloc[0], (str, pd.Timestamp, datetime.date)):
+        dados['ano'] = pd.to_datetime(dados['ano']).dt.year  # Converte e extrai o ano se estiver como string ou datetime.date
+
     return dados
 
 # Carregar os dados
 data = carregar_dados()
 
-# Pré-processamento e seleção de variáveis
-X = data[['quilometragem', 'ano', 'marca']]  # Colunas relevantes
+# Pré-processamento e tratamento de valores ausentes
+X = data[['ano', 'marca']].copy()  # Colunas relevantes
 y = data['preco']
 
-# Codificar a coluna 'marca' (se for categórica) para o modelo
-X = pd.get_dummies(X, columns=['marca'], drop_first=True)
+# Preencher valores ausentes nas colunas numéricas com a média
+num_imputer = SimpleImputer(strategy="mean")
+X.loc[:, ['ano']] = num_imputer.fit_transform(X[['ano']])
+
+# Remover linhas onde 'marca' está ausente
+X = X.dropna(subset=['marca'])
+y = y.loc[X.index]  # Garantir que y e X tenham o mesmo índice
+
+# Codificar a coluna 'marca' com LabelEncoder (sem usar get_dummies)
+label_encoder = LabelEncoder()
+X['marca'] = label_encoder.fit_transform(X['marca'])
 
 # Dividir em treino e teste
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -47,4 +67,6 @@ print(f"RMSE: {rmse}")
 
 # Salvar o modelo
 joblib.dump(model, 'modelo_previsao_veiculos.joblib')
+joblib.dump(X_train.columns, 'colunas_treinamento.pkl')
+
 print("Modelo salvo com sucesso!")
