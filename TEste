@@ -11,7 +11,7 @@ import datetime
 from sklearn.ensemble import RandomForestRegressor
 
 # Conexão com o banco de dados
-DATABASE_URI = 'postgresql+psycopg2://postgres:123@localhost/projeto isaac'
+DATABASE_URI = 'postgresql+psycopg2://postgres:senha@localhost/dataset'
 
 engine = create_engine(DATABASE_URI)
 Session = sessionmaker(bind=engine)
