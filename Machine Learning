@@ -1,20 +1,21 @@
-import joblib
-import pandas as pd
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import mean_squared_error
+import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import datetime
+import joblib
 
-# Conexão com o banco de dados PostgreSQL
-DATABASE_URI = 'postgresql+psycopg2://postgres:123@localhost/projeto isaac'  # Substitua com as credenciais corretas
+# Conexão com o banco de dados
+DATABASE_URI = 'postgresql+psycopg2://postgres:1408@localhost/cars_dataset'
 engine = create_engine(DATABASE_URI)
 Session = sessionmaker(bind=engine)
 
-# Função para carregar os dados do PostgreSQL
+# Carregar dados do banco de dados
 def carregar_dados():
     session = Session()
     query = """
@@ -23,50 +24,65 @@ def carregar_dados():
     WHERE askprice IS NOT NULL
     LIMIT 1000;
     """
-    dados = pd.read_sql(query, session.bind)
+    df = pd.read_sql(query, session.bind)
     session.close()
 
-    # Verificar e converter a coluna 'ano' para o ano numérico
-    if pd.api.types.is_datetime64_any_dtype(dados['ano']):
-        dados['ano'] = dados['ano'].dt.year  # Extrai o ano como inteiro
-    elif isinstance(dados['ano'].iloc[0], (str, pd.Timestamp, datetime.date)):
-        dados['ano'] = pd.to_datetime(dados['ano']).dt.year  # Converte e extrai o ano se estiver como string ou datetime.date
+    # Tratar a coluna de ano
+    df['ano'] = pd.to_datetime(df['ano'], errors='coerce').dt.year
+    return df.dropna(subset=['ano', 'marca', 'preco'])
 
-    return dados
-
-# Carregar os dados
 data = carregar_dados()
 
-# Pré-processamento e tratamento de valores ausentes
-X = data[['ano', 'marca']].copy()  # Colunas relevantes
+# Separar variáveis independentes (X) e dependente (y)
+X = data[['ano', 'marca']]
 y = data['preco']
 
-# Preencher valores ausentes nas colunas numéricas com a média
-num_imputer = SimpleImputer(strategy="mean")
-X.loc[:, ['ano']] = num_imputer.fit_transform(X[['ano']])
+# Filtrar marcas com pelo menos 2 exemplos
+marca_counts = X['marca'].value_counts()
+marcas_validas = marca_counts[marca_counts > 1].index
+X = X[X['marca'].isin(marcas_validas)]
+y = y[X.index]
 
-# Remover linhas onde 'marca' está ausente
-X = X.dropna(subset=['marca'])
-y = y.loc[X.index]  # Garantir que y e X tenham o mesmo índice
+# Pré-processamento com pipeline
+numeric_features = ['ano']
+categorical_features = ['marca']
 
-# Codificar a coluna 'marca' com LabelEncoder (sem usar get_dummies)
-label_encoder = LabelEncoder()
-X['marca'] = label_encoder.fit_transform(X['marca'])
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler', StandardScaler())
+])
 
-# Dividir em treino e teste
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+categorical_transformer = Pipeline(steps=[
+    ('encoder', OneHotEncoder(handle_unknown='ignore'))
+])
 
-# Treinar o modelo
-model = RandomForestRegressor(random_state=42)
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)
+    ]
+)
+
+# Modelo
+model = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('regressor', RandomForestRegressor(random_state=42))
+])
+
+# Divisão estratificada
+split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+for train_index, test_index in split.split(X, X['marca']):
+    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+    y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+
+# Treinar modelo
 model.fit(X_train, y_train)
 
-# Avaliação do modelo
-predictions = model.predict(X_test)
-rmse = mean_squared_error(y_test, predictions, squared=False)
+# Avaliar modelo
+y_pred = model.predict(X_test)
+rmse = mean_squared_error(y_test, y_pred, squared=False)  # Usando mean_squared_error para RMSE
 print(f"RMSE: {rmse}")
 
-# Salvar o modelo
-joblib.dump(model, 'modelo_previsao_veiculos.joblib')
-joblib.dump(X_train.columns, 'colunas_treinamento.pkl')
-
+# Salvar modelo
+joblib.dump(model, 'modelo_previsao_veiculos_com_pipeline.pkl')
 print("Modelo salvo com sucesso!")
